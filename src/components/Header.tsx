@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bolt, Settings as SettingsIcon, Bell, Moon, Sun } from 'lucide-react';
+import { Bolt, Settings as SettingsIcon, Bell, Moon, Sun, ExternalLink } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Stats } from '../types';
 
@@ -22,11 +22,15 @@ export const NavItem = ({ label, active, onClick }: { label: string, active: boo
 export const Header = ({
     activeTab,
     setActiveTab,
-    stats
+    stats,
+    isExtensionPopup,
+    openFullDashboard
 }: {
     activeTab: string;
     setActiveTab: (tab: string) => void;
     stats: Stats | null;
+    isExtensionPopup?: boolean;
+    openFullDashboard?: () => void;
 }) => {
     const [darkMode, setDarkMode] = useState(() => {
         const saved = localStorage.getItem('darkMode');
@@ -91,6 +95,16 @@ export const Header = ({
                 </nav>
 
                 <div className="flex items-center gap-4">
+                    {isExtensionPopup && openFullDashboard && (
+                        <button 
+                            onClick={openFullDashboard}
+                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg border border-blue-200 dark:border-blue-800 transition-all hover:shadow-sm"
+                            title="Open full dashboard in new tab"
+                        >
+                            <ExternalLink size={14} />
+                            Full View
+                        </button>
+                    )}
                     <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-600/10 dark:bg-blue-600/20 rounded-full border border-blue-600/20 dark:border-blue-600/30 transition-colors">
                         <span className="flex h-2 w-2 rounded-full bg-blue-600"></span>
                         <span className="text-xs font-bold text-blue-600 dark:text-blue-400 tracking-wide uppercase">SCORE: {stats?.focus_score}</span>

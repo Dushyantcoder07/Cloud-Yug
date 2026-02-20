@@ -1,13 +1,30 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useEffect } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { storageService } from './storage.js';
+import { motion, AnimatePresence } from 'motion/react';
+
+// Import types
 import { Settings, Activity, EventLog, Stats } from './types';
+
+// Import components
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
+
+// Import pages
 import { Dashboard } from './pages/Dashboard';
 import { HistoryPage } from './pages/HistoryPage';
 import { InsightsPage } from './pages/InsightsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { SettingsPage } from './pages/SettingsPage';
+
+// Type declarations for Chrome extension API
+declare const chrome: any;
+
+// --- Main App ---
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -25,19 +42,35 @@ export default function App() {
     }
   }, []);
 
+  // Check if we're in extension popup context (small width)
+  const isExtensionPopup = typeof window !== 'undefined' && window.innerWidth <= 500;
+  
+  // Function to open full dashboard
+  const openFullDashboard = () => {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+      // Extension context - open options page
+      chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+    } else {
+      // Web context - open in new window
+      window.open(window.location.href, '_blank', 'width=1200,height=800');
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [sRes, aRes, eRes, stRes] = await Promise.all([
-          fetch('/api/settings'),
-          fetch('/api/activities'),
-          fetch('/api/events'),
-          fetch('/api/stats')
+        // Fetch data from chrome.storage instead of API
+        const [settingsData, activitiesData, eventsData, statsData] = await Promise.all([
+          storageService.getSettings(),
+          storageService.getActivities(),
+          storageService.getEvents(),
+          storageService.getStats()
         ]);
-        setSettings(await sRes.json());
-        setActivities(await aRes.json());
-        setEvents(await eRes.json());
-        setStats(await stRes.json());
+        
+        if (settingsData) setSettings(settingsData);
+        setActivities(activitiesData);
+        setEvents(eventsData);
+        if (statsData) setStats(statsData);
       } catch (err) {
         console.error("Failed to fetch data", err);
       } finally {
@@ -45,15 +78,27 @@ export default function App() {
       }
     };
     fetchData();
+    
+    // Listen for storage changes
+    storageService.addChangeListener((changes) => {
+      if (changes.settings) {
+        setSettings(changes.settings.newValue);
+      }
+      if (changes.activities) {
+        setActivities(changes.activities.newValue || []);
+      }
+      if (changes.events) {
+        setEvents(changes.events.newValue || []);
+      }
+      if (changes.stats) {
+        setStats(changes.stats.newValue);
+      }
+    });
   }, []);
 
   const handleSaveSettings = async (newSettings: Settings) => {
     try {
-      await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings)
-      });
+      await storageService.updateSettings(newSettings);
       setSettings(newSettings);
       alert("Settings saved successfully!");
     } catch (err) {
@@ -74,7 +119,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col font-sans transition-colors">
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} stats={stats} />
+      <Header activeTab={activeTab} setActiveTab={setActiveTab} stats={stats} isExtensionPopup={isExtensionPopup} openFullDashboard={openFullDashboard} />
 
       <main className="flex-1 w-full max-w-7xl mx-auto p-6 md:p-10">
         <AnimatePresence mode="wait">
