@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Burnout Guard</title>
+    <link rel="stylesheet" href="popup.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">🛡️</span>
+                    <span class="logo-text">Burnout Guard</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <span class="status-pill" id="status-pill">
+                    <span class="status-dot"></span>
+                    <span id="status-text">Monitoring</span>
+                </span>
+            </div>
+        </header>
+
+        <!-- Loading State -->
+        <div id="loading-view" class="loading">
+            <div class="spinner"></div>
+            <p>Analyzing your digital patterns...</p>
+        </div>
+
+        <!-- Main Content -->
+        <div id="main-content" class="content" style="display:none;">
+
+            <!-- Score Hero -->
+            <section class="score-hero">
+                <div class="score-ring-container">
+                    <svg class="score-ring" viewBox="0 0 120 120">
+                        <circle class="ring-bg" cx="60" cy="60" r="52" />
+                        <circle class="ring-fill" id="score-ring-fill" cx="60" cy="60" r="52" />
+                    </svg>
+                    <div class="score-value">
+                        <span class="score-number" id="score-number">--</span>
+                        <span class="score-label" id="score-label">Focus</span>
+                    </div>
+                </div>
+                <div class="score-meta">
+                    <h2 id="score-headline">Analyzing...</h2>
+                    <p id="score-description" class="score-desc">Loading your focus data.</p>
+                    <div class="score-trend" id="score-trend">
+                        <span class="trend-icon">↗</span>
+                        <span class="trend-text" id="trend-text">+0 from last hour</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quick Stats -->
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-blue">⏱️</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-session">--</span>
+                        <span class="stat-label">Session</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-green">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-active">--</span>
+                        <span class="stat-label">Active</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-amber">💤</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-idle">--</span>
+                        <span class="stat-label">Idle</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-purple">🔀</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-tabs">--</span>
+                        <span class="stat-label">Switches</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Factor Breakdown -->
+            <section class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🧬 Score Breakdown</h3>
+                    <span class="card-badge">Live</span>
+                </div>
+                <div class="factors-list" id="factors-list">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <!-- Hourly Chart -->
+            <section class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📈 Focus Timeline</h3>
+                    <span class="card-subtitle" id="chart-subtitle">Last 12 hours</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="focus-chart"></canvas>
+                </div>
+            </section>
+
+            <!-- Insights -->
+            <section class="card" id="insights-section">
+                <div class="card-header">
+                    <h3 class="card-title">💡 Live Insights</h3>
+                </div>
+                <div class="insights-list" id="insights-list">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <!-- Recent Interventions -->
+            <section class="card" id="interventions-section">
+                <div class="card-header">
+                    <h3 class="card-title">🩺 Recent Interventions</h3>
+                </div>
+                <div class="interventions-list" id="interventions-list">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <!-- Quick Actions -->
+            <section class="quick-actions">
+                <button class="action-btn action-breathe" id="btn-breathe">
+                    🌬️ Start Breathing
+                </button>
+                <button class="action-btn action-focus" id="btn-focus">
+                    🎯 Focus Block
+                </button>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

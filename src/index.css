@@ -10,3 +10,16 @@
     @apply font-sans;
   }
 }
+
+@custom-variant dark (&:is(.dark *));
+
+/* Ensure class-based dark mode works properly */
+@media (prefers-color-scheme: dark) {
+  :root:not(.dark) {
+    color-scheme: light;
+  }
+}
+
+:root.dark {
+  color-scheme: dark;
+}

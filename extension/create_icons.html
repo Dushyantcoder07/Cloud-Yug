@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Generate Icons</title>
+</head>
+
+<body>
+    <h2>Right-click each icon and "Save image as..." to the extension/icons/ folder</h2>
+    <div style="display:flex;gap:40px;padding:40px;background:#f0f0f0;">
+        <div>
+            <p>icon16.png</p>
+            <canvas id="c16" width="16" height="16"></canvas>
+        </div>
+        <div>
+            <p>icon48.png</p>
+            <canvas id="c48" width="48" height="48"></canvas>
+        </div>
+        <div>
+            <p>icon128.png</p>
+            <canvas id="c128" width="128" height="128"></canvas>
+        </div>
+    </div>
+    <script>
+        function drawIcon(canvas) {
+            const s = canvas.width;
+            const ctx = canvas.getContext('2d');
+
+            // Background circle
+            const grad = ctx.createLinearGradient(0, 0, s, s);
+            grad.addColorStop(0, '#2563eb');
+            grad.addColorStop(1, '#7c3aed');
+
+            ctx.beginPath();
+            ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // Shield shape
+            ctx.beginPath();
+            const cx = s / 2, top = s * 0.18, bot = s * 0.82, mid = s * 0.55;
+            const w = s * 0.32;
+            ctx.moveTo(cx, top);
+            ctx.quadraticCurveTo(cx + w, top + s * 0.05, cx + w, mid);
+            ctx.quadraticCurveTo(cx + w * 0.8, bot - s * 0.05, cx, bot);
+            ctx.quadraticCurveTo(cx - w * 0.8, bot - s * 0.05, cx - w, mid);
+            ctx.quadraticCurveTo(cx - w, top + s * 0.05, cx, top);
+            ctx.fillStyle = 'rgba(255,255,255,0.95)';
+            ctx.fill();
+
+            // Inner brain-like dot pattern
+            ctx.fillStyle = '#2563eb';
+            const dotR = s * 0.04;
+            const dots = [
+                [0, -0.12], [0, 0.05], [0, 0.22],
+                [-0.1, -0.03], [0.1, -0.03],
+                [-0.08, 0.14], [0.08, 0.14],
+            ];
+            dots.forEach(([dx, dy]) => {
+                ctx.beginPath();
+                ctx.arc(cx + dx * s, cy(s) + dy * s, dotR, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Lines connecting dots
+            ctx.strokeStyle = '#2563eb';
+            ctx.lineWidth = s * 0.015;
+            ctx.beginPath();
+            ctx.moveTo(cx - 0.1 * s, cy(s) - 0.03 * s);
+            ctx.lineTo(cx, cy(s) - 0.12 * s);
+            ctx.lineTo(cx + 0.1 * s, cy(s) - 0.03 * s);
+            ctx.moveTo(cx - 0.08 * s, cy(s) + 0.14 * s);
+            ctx.lineTo(cx, cy(s) + 0.05 * s);
+            ctx.lineTo(cx + 0.08 * s, cy(s) + 0.14 * s);
+            ctx.moveTo(cx, cy(s) + 0.05 * s);
+            ctx.lineTo(cx, cy(s) - 0.12 * s);
+            ctx.stroke();
+        }
+
+        function cy(s) { return s * 0.48; }
+
+        ['c16', 'c48', 'c128'].forEach(id => {
+            const c = document.getElementById(id);
+            drawIcon(c);
+            // Convert to image for easy saving
+            const img = new Image();
+            img.src = c.toDataURL('image/png');
+            img.style.border = '1px solid #ccc';
+            img.style.imageRendering = 'pixelated';
+            img.style.width = Math.max(c.width * 2, 64) + 'px';
+            c.parentElement.appendChild(img);
+        });
+    </script>
+</body>
+
+</html>
