@@ -55,7 +55,6 @@ export const HistoryPage = ({ activities, events, stats, fatigueMetrics }: Histo
                     </div>
                     <div className="flex items-baseline gap-2">
                         <span className="text-3xl font-black text-slate-900 dark:text-slate-50">{stats.active_time}</span>
-                        <span className="text-[10px] font-bold text-green-500 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full">+12%</span>
                     </div>
                 </div>
 
@@ -69,7 +68,6 @@ export const HistoryPage = ({ activities, events, stats, fatigueMetrics }: Histo
                     <div className="flex items-baseline gap-2">
                         <span className="text-3xl font-black text-slate-900 dark:text-slate-50">{stats.focus_score}</span>
                         <span className="text-sm font-bold text-slate-400">/100</span>
-                        <span className="text-[10px] font-bold text-green-500 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full ml-1">+5%</span>
                     </div>
                 </div>
 
@@ -82,7 +80,6 @@ export const HistoryPage = ({ activities, events, stats, fatigueMetrics }: Histo
                     </div>
                     <div className="flex items-baseline gap-2">
                         <span className="text-3xl font-black text-slate-900 dark:text-slate-50">{stats.interventions}</span>
-                        <span className="text-[10px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full ml-1">-2</span>
                     </div>
                 </div>
 

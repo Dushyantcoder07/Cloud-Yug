@@ -111,3 +111,54 @@ export interface Stats {
         fatigued: boolean;
     };
 }
+
+// Goals and Daily Tracking Types
+export interface DailyMetrics {
+    date: string; // YYYY-MM-DD
+    focusScore: number;
+    activeMinutes: number;
+    tabSwitches: number;
+    interventions: number;
+    physiologicalScore: number;
+    timestamp: number;
+}
+
+export interface WeeklyTrend {
+    improvement: number; // percentage change
+    percentChange: number; // percentage change (alias for improvement)
+    message: string; // descriptive message about the trend
+    avgSessionIncrease: number; // minutes
+    currentWeekAvg: number;
+    previousWeekAvg: number;
+    dailyScores: number[];
+}
+
+export interface RecoveryStreak {
+    currentStreak: number; // consecutive days
+    threshold: number; // minimum score to maintain streak
+    dailyScores: Array<{
+        date: string;
+        dayOfWeek: string;
+        score: number;
+        achieved: boolean;
+    }>;
+}
+
+export interface DailyProgress {
+    activeHours: number;
+    activeMinutes: number;
+    targetHours: number;
+    activePercentage: number;
+    remainingMinutes: number;
+    tabSwitches: number;
+    tabSwitchLimit: number;
+    tabSwitchPercentage: number;
+    focusScore: number;
+    scorePercentage: number;
+}
+
+export interface FocusInsight {
+    icon: string;
+    message: string;
+    type: 'positive' | 'warning' | 'tip' | 'peak' | 'improvement';
+}

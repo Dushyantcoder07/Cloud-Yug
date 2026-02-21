@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Target, TrendingUp, ArrowRight, Clock, LayoutDashboard, Moon, Bell, CheckCircle2, Info, Lightbulb, AlertTriangle, Eye, Gauge, Activity, MousePointer, ScrollText } from 'lucide-react';
 import { Settings, Stats } from '../types';
 import { PhysiologicalMetrics } from '../hooks/useFatigueDetection';
+import { useGoalsTracking } from '../hooks/useGoalsTracking';
+import { storageService } from '../storage.js';
 
 interface GoalsPageProps {
     settings: Settings | null;
@@ -11,6 +13,25 @@ interface GoalsPageProps {
 }
 
 export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: GoalsPageProps) => {
+    // Load goals tracking data
+    const goalsData = useGoalsTracking(stats || null, settings, fatigueMetrics);
+    
+    // Local state for interactive controls
+    const [focusTarget, setFocusTarget] = useState(settings?.daily_focus_target || 4);
+    const [tabSwitchLimit, setTabSwitchLimit] = useState(settings?.max_tab_switches || 15);
+    const [digitalSunset, setDigitalSunset] = useState(settings?.digital_sunset || '22:00');
+    const [alertSensitivity, setAlertSensitivity] = useState(settings?.alert_sensitivity || 'Balanced');
+    
+    // Sync with settings when they change
+    useEffect(() => {
+        if (settings) {
+            setFocusTarget(settings.daily_focus_target);
+            setTabSwitchLimit(settings.max_tab_switches);
+            setDigitalSunset(settings.digital_sunset);
+            setAlertSensitivity(settings.alert_sensitivity);
+        }
+    }, [settings]);
+    
     // Use default values if settings are null
     const displaySettings = settings || {
         daily_focus_target: 4,
@@ -21,6 +42,13 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
         email: 'user@example.com'
     };
     
+    // Handler to update settings
+    const updateSettings = async (updates: Partial<Settings>) => {
+        if (!settings) return;
+        const newSettings = { ...settings, ...updates };
+        await storageService.updateSettings(newSettings);
+    };
+    
     // Calculate health goals progress
     const blinkHealthPercent = isTracking ? Math.max(0, 100 - fatigueMetrics.blinkRateScore) : 0;
     const postureHealthPercent = isTracking ? Math.max(0, 100 - fatigueMetrics.postureScore) : 0;
@@ -28,26 +56,42 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
 
     return (
         <div className="w-full max-w-[90rem] mx-auto space-y-8">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group flex flex-col md:flex-row md:items-center justify-between gap-10 transition-colors">
-                <div className="absolute right-[-20%] top-[-20%] w-[60%] h-[140%] opacity-[0.03] dark:opacity-[0.05] pointer-events-none transition-transform group-hover:scale-105 duration-700">
-                    <TrendingUp className="text-green-500" fill="currentColor" size={400} />
-                </div>
-                <div className="relative z-10 max-w-2xl">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-black uppercase tracking-widest rounded-full mb-6">
-                        <TrendingUp size={14} /> Weekly Performance
+            {/* Weekly Trend Banner */}
+            {goalsData.weeklyTrend ? (
+                <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group flex flex-col md:flex-row md:items-center justify-between gap-10 transition-colors">
+                    <div className="absolute right-[-20%] top-[-20%] w-[60%] h-[140%] opacity-[0.03] dark:opacity-[0.05] pointer-events-none transition-transform group-hover:scale-105 duration-700">
+                        <TrendingUp className={goalsData.weeklyTrend.percentChange >= 0 ? "text-green-500" : "text-amber-500"} fill="currentColor" size={400} />
                     </div>
-                    <h2 className="text-4xl font-black mb-4 tracking-tight text-slate-900 dark:text-slate-50">Stability improved by 12% this week</h2>
-                    <p className="text-slate-500 dark:text-slate-400 text-base leading-relaxed font-medium">
-                        Your cognitive baseline is stabilizing. You are regaining control over context switching, and your deep work endurance has increased by an average of <span className="text-green-500 font-bold">18 minutes</span> per session.
+                    <div className="relative z-10 max-w-2xl">
+                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 ${goalsData.weeklyTrend.percentChange >= 0 ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'} text-[10px] font-black uppercase tracking-widest rounded-full mb-6`}>
+                            <TrendingUp size={14} /> Weekly Performance
+                        </div>
+                        <h2 className="text-4xl font-black mb-4 tracking-tight text-slate-900 dark:text-slate-50">
+                            {goalsData.weeklyTrend.message}
+                        </h2>
+                        <p className="text-slate-500 dark:text-slate-400 text-base leading-relaxed font-medium">
+                            {goalsData.motivationalMessage}
+                        </p>
+                    </div>
+                    <div className="relative z-10 shrink-0">
+                        <div className={`text-center ${goalsData.weeklyTrend.percentChange >= 0 ? 'text-green-500' : 'text-amber-500'}`}>
+                            <div className="text-5xl font-black">
+                                {goalsData.weeklyTrend.percentChange >= 0 ? '+' : ''}{goalsData.weeklyTrend.percentChange.toFixed(1)}%
+                            </div>
+                            <div className="text-xs font-bold uppercase tracking-widest mt-2">
+                                vs last week
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden flex items-center justify-center gap-3 transition-colors">
+                    <Info className="text-slate-400" size={20} />
+                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
+                        Start tracking to see your weekly performance trends
                     </p>
                 </div>
-                <div className="relative z-10 shrink-0">
-                    <button className="bg-green-500 hover:bg-green-600 text-white font-bold px-8 py-4 rounded-full transition-all flex items-center gap-2 shadow-lg shadow-green-500/20 text-sm cursor-pointer">
-                        View Detailed Report
-                        <ArrowRight size={18} />
-                    </button>
-                </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
@@ -73,14 +117,25 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
                                 </div>
                                 <div className="mt-8 mb-2">
                                     <div className="flex justify-between items-end mb-3">
-                                        <span className="text-3xl font-black text-slate-900 dark:text-slate-50">{displaySettings.daily_focus_target}.0 <span className="text-xs font-semibold text-slate-400">hrs</span></span>
-                                        <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">+20% vs avg</span>
+                                        <span className="text-3xl font-black text-slate-900 dark:text-slate-50">{focusTarget}.0 <span className="text-xs font-semibold text-slate-400">hrs</span></span>
+                                        <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Daily Target</span>
                                     </div>
-                                    <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full">
-                                        <div className="h-full bg-green-500 rounded-full relative" style={{ width: '50%' }}>
-                                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white dark:bg-slate-900 border-[3px] border-green-500 rounded-full shadow-sm"></div>
-                                        </div>
-                                    </div>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="12"
+                                        step="1"
+                                        value={focusTarget}
+                                        onChange={(e) => {
+                                            const value = parseInt(e.target.value);
+                                            setFocusTarget(value);
+                                            updateSettings({ daily_focus_target: value });
+                                        }}
+                                        className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full appearance-none cursor-pointer accent-green-500"
+                                        style={{
+                                            background: `linear-gradient(to right, rgb(34, 197, 94) 0%, rgb(34, 197, 94) ${((focusTarget - 1) / 11) * 100}%, rgb(226, 232, 240) ${((focusTarget - 1) / 11) * 100}%, rgb(226, 232, 240) 100%)`
+                                        }}
+                                    />
                                 </div>
                             </div>
 
@@ -94,14 +149,33 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
                                 </div>
                                 <div className="mt-8 mb-2">
                                     <div className="flex justify-between items-end mb-3">
-                                        <span className="text-3xl font-black text-slate-900 dark:text-slate-50">{displaySettings.max_tab_switches} <span className="text-xs font-semibold text-slate-400">switches</span></span>
-                                        <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Low friction</span>
+                                        <span className="text-3xl font-black text-slate-900 dark:text-slate-50">{tabSwitchLimit} <span className="text-xs font-semibold text-slate-400">switches</span></span>
+                                        <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                                            goalsData.dailyProgress.tabSwitches <= tabSwitchLimit / 2 ? 'text-green-500' : 
+                                            goalsData.dailyProgress.tabSwitches <= tabSwitchLimit ? 'text-amber-500' : 
+                                            'text-rose-500'
+                                        }`}>
+                                            {goalsData.dailyProgress.tabSwitches <= tabSwitchLimit / 2 ? 'Low friction' : 
+                                             goalsData.dailyProgress.tabSwitches <= tabSwitchLimit ? 'Moderate' : 
+                                             'High friction'}
+                                        </span>
                                     </div>
-                                    <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full">
-                                        <div className="h-full bg-green-500 rounded-full relative" style={{ width: '30%' }}>
-                                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white dark:bg-slate-900 border-[3px] border-green-500 rounded-full shadow-sm"></div>
-                                        </div>
-                                    </div>
+                                    <input
+                                        type="range"
+                                        min="5"
+                                        max="50"
+                                        step="5"
+                                        value={tabSwitchLimit}
+                                        onChange={(e) => {
+                                            const value = parseInt(e.target.value);
+                                            setTabSwitchLimit(value);
+                                            updateSettings({ max_tab_switches: value });
+                                        }}
+                                        className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full appearance-none cursor-pointer accent-green-500"
+                                        style={{
+                                            background: `linear-gradient(to right, rgb(34, 197, 94) 0%, rgb(34, 197, 94) ${((tabSwitchLimit - 5) / 45) * 100}%, rgb(226, 232, 240) ${((tabSwitchLimit - 5) / 45) * 100}%, rgb(226, 232, 240) 100%)`
+                                        }}
+                                    />
                                 </div>
                             </div>
 
@@ -114,11 +188,22 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
                                     <Moon className="text-slate-400" size={18} />
                                 </div>
                                 <div className="flex items-center gap-4 mt-8">
-                                    <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl font-bold text-lg px-4 py-3 flex-1 flex justify-between items-center shadow-sm transition-colors">
-                                        {displaySettings.digital_sunset}
-                                        <ArrowRight size={16} className="text-slate-300 dark:text-slate-600" />
-                                    </div>
-                                    <button className="w-12 h-12 flex items-center justify-center bg-green-500 text-white rounded-xl shadow-md shadow-green-500/20 cursor-pointer">
+                                    <input
+                                        type="time"
+                                        value={digitalSunset}
+                                        onChange={(e) => {
+                                            setDigitalSunset(e.target.value);
+                                            updateSettings({ digital_sunset: e.target.value });
+                                        }}
+                                        className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl font-bold text-lg px-4 py-3 flex-1 flex justify-between items-center shadow-sm transition-colors cursor-pointer text-slate-900 dark:text-slate-50"
+                                    />
+                                    <button 
+                                        className="w-12 h-12 flex items-center justify-center bg-green-500 hover:bg-green-600 text-white rounded-xl shadow-md shadow-green-500/20 cursor-pointer transition-colors"
+                                        onClick={() => {
+                                            // Notification functionality can be added here
+                                            alert(`Notification set for ${digitalSunset}`);
+                                        }}
+                                    >
                                         <Bell size={20} fill="currentColor" />
                                     </button>
                                 </div>
@@ -133,11 +218,19 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
                                     <Bell size={18} className="text-slate-400" />
                                 </div>
                                 <div className="flex gap-2 mt-8">
-                                    {['Quiet', 'Balanced', 'Active'].map((s, i) => (
-                                        <button key={s} className={`flex-1 py-3 text-[10px] font-black rounded-xl border transition-colors uppercase tracking-widest cursor-pointer ${(displaySettings.alert_sensitivity === s || (s === 'Balanced' && !displaySettings.alert_sensitivity))
-                                                ? 'bg-green-500 text-white border-green-500 shadow-md shadow-green-500/20'
-                                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm'
-                                            }`}>
+                                    {['Quiet', 'Balanced', 'Active'].map((s) => (
+                                        <button 
+                                            key={s} 
+                                            onClick={() => {
+                                                setAlertSensitivity(s);
+                                                updateSettings({ alert_sensitivity: s });
+                                            }}
+                                            className={`flex-1 py-3 text-[10px] font-black rounded-xl border transition-colors uppercase tracking-widest cursor-pointer ${
+                                                alertSensitivity === s
+                                                    ? 'bg-green-500 text-white border-green-500 shadow-md shadow-green-500/20'
+                                                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm'
+                                            }`}
+                                        >
                                             {s}
                                         </button>
                                     ))}
@@ -155,16 +248,49 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
                                     </div>
                                     Recovery Streak
                                 </h4>
-                                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-wide"><span className="text-slate-900 dark:text-slate-100 text-sm">8 days</span> above 75 score</p>
+                                {goalsData.recoveryStreak ? (
+                                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-wide">
+                                        <span className="text-slate-900 dark:text-slate-100 text-sm">{goalsData.recoveryStreak.currentStreak} days</span> above {goalsData.recoveryStreak.threshold} score
+                                    </p>
+                                ) : (
+                                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-wide">No streak yet</p>
+                                )}
                             </div>
-                            <div className="flex justify-between items-center gap-2 max-w-xl mx-auto">
-                                {['M', 'T', 'W', 'T', 'F', 'S', 'S', 'M', 'T'].map((day, i) => (
-                                    <div key={i} className="flex flex-col items-center gap-4">
-                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xs ${i < 4 ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : i === 4 ? 'bg-green-50 dark:bg-green-900/30 text-green-500 border border-green-200 dark:border-green-800' : i < 6 ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border border-slate-100 dark:border-slate-700' : 'bg-transparent text-slate-300'}`}>{day}</div>
-                                        {i < 4 ? <CheckCircle2 className="text-green-500" size={16} fill="currentColor" /> : i === 4 ? <div className="size-4 rounded-full border-[3px] border-green-200 dark:border-green-800" /> : i < 6 ? <div className="size-4 rounded-full border-[3px] border-slate-200 dark:border-slate-700" /> : <div className="size-0.5 rounded-full bg-slate-300 dark:bg-slate-700" />}
-                                    </div>
-                                ))}
-                            </div>
+                            {goalsData.recoveryStreak && goalsData.recoveryStreak.currentStreak > 0 ? (
+                                <div className="flex justify-between items-center gap-2 max-w-xl mx-auto">
+                                    {Array.from({ length: Math.min(9, goalsData.recoveryStreak.currentStreak + 2) }).map((_, i) => {
+                                        const isComplete = i < goalsData.recoveryStreak!.currentStreak;
+                                        const isCurrent = i === goalsData.recoveryStreak!.currentStreak;
+                                        const isFuture = i > goalsData.recoveryStreak!.currentStreak;
+                                        const dayLabel = ['M', 'T', 'W', 'T', 'F', 'S', 'S', 'M', 'T'][i];
+                                        
+                                        return (
+                                            <div key={i} className="flex flex-col items-center gap-4">
+                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xs ${
+                                                    isComplete ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 
+                                                    isCurrent ? 'bg-green-50 dark:bg-green-900/30 text-green-500 border border-green-200 dark:border-green-800' : 
+                                                    'bg-slate-50 dark:bg-slate-800 text-slate-400 border border-slate-100 dark:border-slate-700'
+                                                }`}>
+                                                    {dayLabel}
+                                                </div>
+                                                {isComplete ? (
+                                                    <CheckCircle2 className="text-green-500" size={16} fill="currentColor" />
+                                                ) : isCurrent ? (
+                                                    <div className="size-4 rounded-full border-[3px] border-green-200 dark:border-green-800" />
+                                                ) : (
+                                                    <div className="size-4 rounded-full border-[3px] border-slate-200 dark:border-slate-700" />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8">
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        Maintain a focus score above 75 for consecutive days to start your streak
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </section>
 
@@ -535,69 +661,126 @@ export const GoalsPage = ({ settings, fatigueMetrics, isTracking, stats }: Goals
                 <div className="space-y-8">
                     <section className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-800 sticky top-24 shadow-sm transition-colors">
                         <h3 className="text-xl font-bold mb-8">Daily Standing</h3>
+                        
+                        {/* Deep Work Progress */}
                         <div className="mb-8">
                             <div className="flex justify-between items-baseline mb-4">
                                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Deep Work</span>
-                                <span className="text-sm font-black text-slate-900 dark:text-slate-50">3.2 / 4.0 hrs</span>
+                                <span className="text-sm font-black text-slate-900 dark:text-slate-50">
+                                    {goalsData.dailyProgress.activeHours}h {goalsData.dailyProgress.activeMinutes}m / {displaySettings.daily_focus_target}.0 hrs
+                                </span>
                             </div>
                             <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-green-500 rounded-full" style={{ width: '80%' }}></div>
+                                <div 
+                                    className={`h-full rounded-full ${
+                                        goalsData.dailyProgress.activePercentage >= 100 ? 'bg-green-500' : 
+                                        goalsData.dailyProgress.activePercentage >= 70 ? 'bg-green-500' : 
+                                        'bg-amber-500'
+                                    }`} 
+                                    style={{ width: `${Math.min(100, goalsData.dailyProgress.activePercentage)}%` }}
+                                ></div>
                             </div>
                             <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-3 flex items-center gap-1.5 font-medium">
-                                <Info size={12} />
-                                48 mins remaining to hit daily goal
+                                {goalsData.dailyProgress.activePercentage >= 100 ? (
+                                    <>
+                                        <CheckCircle2 size={12} className="text-green-500" />
+                                        Daily goal achieved!
+                                    </>
+                                ) : (
+                                    <>
+                                        <Info size={12} />
+                                        {goalsData.dailyProgress.remainingMinutes} mins remaining to hit daily goal
+                                    </>
+                                )}
                             </p>
                         </div>
 
+                        {/* Tab Switches Progress */}
                         <div className="mb-8">
                             <div className="flex justify-between items-baseline mb-4">
                                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Context Switches</span>
-                                <span className="text-sm font-black text-green-500">6 / 15 limit</span>
+                                <span className={`text-sm font-black ${
+                                    goalsData.dailyProgress.tabSwitches > displaySettings.max_tab_switches ? 'text-rose-500' : 'text-green-500'
+                                }`}>
+                                    {goalsData.dailyProgress.tabSwitches} / {displaySettings.max_tab_switches} limit
+                                </span>
                             </div>
                             <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-green-500/40 rounded-full" style={{ width: '40%' }}></div>
+                                <div 
+                                    className={`h-full rounded-full ${
+                                        goalsData.dailyProgress.tabSwitches > displaySettings.max_tab_switches ? 'bg-rose-500' : 'bg-green-500/40'
+                                    }`} 
+                                    style={{ width: `${Math.min(100, (goalsData.dailyProgress.tabSwitches / displaySettings.max_tab_switches) * 100)}%` }}
+                                ></div>
                             </div>
                             <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-3 flex items-center gap-1.5 font-medium">
-                                <CheckCircle2 size={12} className="text-green-500" />
-                                Highly stable behavior today
+                                {goalsData.dailyProgress.tabSwitches <= displaySettings.max_tab_switches / 2 ? (
+                                    <>
+                                        <CheckCircle2 size={12} className="text-green-500" />
+                                        Highly stable behavior today
+                                    </>
+                                ) : goalsData.dailyProgress.tabSwitches <= displaySettings.max_tab_switches ? (
+                                    <>
+                                        <Info size={12} />
+                                        Moderate context switching
+                                    </>
+                                ) : (
+                                    <>
+                                        <AlertTriangle size={12} className="text-rose-500" />
+                                        High context switching detected
+                                    </>
+                                )}
                             </p>
                         </div>
 
+                        {/* Attention Score */}
                         <div className="mb-10">
                             <div className="flex justify-between items-baseline mb-4">
                                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Attention Score</span>
-                                <span className="text-sm font-black text-slate-900 dark:text-slate-50">88 / 100</span>
+                                <span className="text-sm font-black text-slate-900 dark:text-slate-50">
+                                    {Math.round(goalsData.dailyProgress.focusScore)} / 100
+                                </span>
                             </div>
                             <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.4)]" style={{ width: '88%' }}></div>
+                                <div 
+                                    className={`h-full rounded-full ${
+                                        goalsData.dailyProgress.focusScore >= 75 ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 
+                                        goalsData.dailyProgress.focusScore >= 50 ? 'bg-amber-500' : 
+                                        'bg-rose-500'
+                                    }`} 
+                                    style={{ width: `${goalsData.dailyProgress.focusScore}%` }}
+                                ></div>
                             </div>
                         </div>
 
+                        {/* Focus Insights */}
                         <div className="border-t border-slate-100 dark:border-slate-800 pt-8">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Focus Insights</p>
-                            <ul className="space-y-6">
-                                <li className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400 flex items-center justify-center shrink-0">
-                                        <Lightbulb size={14} fill="currentColor" />
-                                    </div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
-                                        Your attention peaks between <span className="text-slate-900 dark:text-slate-100 font-bold">9 AM and 11 AM</span>. Schedule deep work here.
-                                    </p>
-                                </li>
-                                <li className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400 flex items-center justify-center shrink-0">
-                                        <AlertTriangle size={14} fill="currentColor" />
-                                    </div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
-                                        Email browsing after <span className="text-slate-900 dark:text-slate-100 font-bold">4 PM</span> significantly spikes context switching.
-                                    </p>
-                                </li>
-                            </ul>
+                            {goalsData.insights.length > 0 ? (
+                                <ul className="space-y-6">
+                                    {goalsData.insights.map((insight, idx) => (
+                                        <li key={idx} className="flex gap-4">
+                                            <div className={`w-8 h-8 rounded-full ${
+                                                insight.type === 'peak' ? 'bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400' : 
+                                                insight.type === 'warning' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400' : 
+                                                'bg-blue-50 dark:bg-blue-900/30 text-blue-500 dark:text-blue-400'
+                                            } flex items-center justify-center shrink-0`}>
+                                                {insight.type === 'peak' && <Lightbulb size={14} fill="currentColor" />}
+                                                {insight.type === 'warning' && <AlertTriangle size={14} fill="currentColor" />}
+                                                {insight.type === 'improvement' && <TrendingUp size={14} />}
+                                            </div>
+                                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                                                {insight.message}
+                                            </p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 italic">
+                                    Continue tracking to unlock personalized insights
+                                </p>
+                            )}
                         </div>
-
-                        <button className="w-full mt-10 py-4 bg-slate-900 text-white text-xs font-bold rounded-2xl transition-all hover:bg-slate-800 active:scale-95 shadow-xl shadow-slate-900/20 cursor-pointer">
-                            Download Weekly Summary
-                        </button>
                     </section>
                 </div>
             </div>

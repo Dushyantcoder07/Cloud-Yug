@@ -23,3 +23,69 @@
 :root.dark {
   color-scheme: dark;
 }
+
+/* Custom range slider styling for Goals page */
+@layer components {
+  /* Slider track */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 9999px;
+    outline: none;
+  }
+
+  /* Slider thumb - WebKit (Chrome, Safari, Edge) */
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgb(34, 197, 94);
+    cursor: pointer;
+    border: 3px solid white;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    transition: all 0.15s ease;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  }
+
+  /* Slider thumb - Firefox */
+  input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgb(34, 197, 94);
+    cursor: pointer;
+    border: 3px solid white;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    transition: all 0.15s ease;
+  }
+
+  input[type="range"]::-moz-range-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  }
+
+  /* Dark mode adjustments */
+  .dark input[type="range"]::-webkit-slider-thumb {
+    border-color: rgb(15, 23, 42);
+  }
+
+  .dark input[type="range"]::-moz-range-thumb {
+    border-color: rgb(15, 23, 42);
+  }
+
+  /* Time input styling */
+  input[type="time"] {
+    color-scheme: light;
+  }
+
+  .dark input[type="time"] {
+    color-scheme: dark;
+  }
+}

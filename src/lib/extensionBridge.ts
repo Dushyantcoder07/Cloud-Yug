@@ -13,8 +13,8 @@ const isExtensionContext = typeof chrome !== 'undefined' && chrome?.runtime?.id;
  */
 export async function fetchExtensionBehavioralData(): Promise<Partial<Stats> | null> {
     if (!isExtensionContext) {
-        console.log('[ExtensionBridge] Not in extension context, returning mock data');
-        return getMockBehavioralData();
+        console.log('[ExtensionBridge] Not in extension context, no data available');
+        return null;
     }
 
     try {
@@ -63,7 +63,7 @@ export async function fetchExtensionBehavioralData(): Promise<Partial<Stats> | n
         return null;
     } catch (error) {
         console.error('[ExtensionBridge] Failed to fetch extension data:', error);
-        return getMockBehavioralData();
+        return null;
     }
 }
 
@@ -74,13 +74,9 @@ export async function fetchExtensionBehavioralData(): Promise<Partial<Stats> | n
  */
 export function subscribeToExtensionUpdates(callback: (data: Partial<Stats>) => void): () => void {
     if (!isExtensionContext) {
-        console.log('[ExtensionBridge] Not in extension context, using mock updates');
-        // Simulate updates every 8 seconds with mock data for dev
-        const interval = setInterval(() => {
-            callback(getMockBehavioralData());
-        }, 8000);
-        
-        return () => clearInterval(interval);
+        console.log('[ExtensionBridge] Not in extension context, no updates available');
+        // Return no-op cleanup function
+        return () => {};
     }
 
     const messageListener = (message: any) => {

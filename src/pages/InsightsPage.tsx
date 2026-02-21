@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, Clock, Moon, Zap, Lightbulb, Brain, Eye, Gauge, TrendingUp as TrendingUpIcon, Activity, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Clock, Moon, Zap, Lightbulb, Brain, Eye, Gauge, TrendingUp as TrendingUpIcon, Activity, CheckCircle2, Sparkles, Target, Shield } from 'lucide-react';
 import { Stats } from '../types';
 import { PhysiologicalMetrics } from '../hooks/useFatigueDetection';
 import { calculateExhaustionIndex, predictFatigueTrajectory, detectExhaustionPattern } from '../lib/exhaustionEngine';
+import { useAIPredictions } from '../hooks/useAIPredictions';
+import { CombinedMetrics } from '../lib/ai-prediction-engine';
 
 interface InsightsPageProps {
     stats: Stats | null;
@@ -14,11 +16,19 @@ interface InsightsPageProps {
 export const InsightsPage = ({ stats, fatigueMetrics, isTracking }: InsightsPageProps) => {
     const [exhaustionData, setExhaustionData] = useState<any>(null);
     const [pattern, setPattern] = useState<any>(null);
+    const [metricsHistory, setMetricsHistory] = useState<CombinedMetrics[]>([]);
+    
+    // Initialize AI predictions
+    const aiPredictions = useAIPredictions();
     
     useEffect(() => {
-        if (isTracking) {
-            // Use real behavioral data from extension if available
-            const behavioralMetrics = stats.factors ? {
+        if (isTracking && stats) {
+            // Use real behavioral data from extension (no mock fallback)
+            if (!stats.factors) {
+                return; // Wait for real data from extension
+            }
+            
+            const behavioralMetrics = {
                 tabSwitchScore: stats.factors.tabSwitching?.penalty || 0,
                 typingFatigueScore: stats.factors.typingFatigue?.penalty || 0,
                 clickAccuracyScore: stats.factors.clickAccuracy?.penalty || 0,
@@ -26,15 +36,6 @@ export const InsightsPage = ({ stats, fatigueMetrics, isTracking }: InsightsPage
                 scrollAnxietyScore: stats.factors.anxiousScroll?.penalty || 0,
                 timeOfDayScore: stats.factors.lateNight?.penalty || 0,
                 idleTimeScore: stats.factors.idle?.penalty || 0
-            } : {
-                // Fallback to mock data if extension data not available
-                tabSwitchScore: 30,
-                typingFatigueScore: 20,
-                clickAccuracyScore: 85,
-                mouseErraticScore: 25,
-                scrollAnxietyScore: 30,
-                timeOfDayScore: 10,
-                idleTimeScore: 15
             };
             
             const physiologicalMetrics = {
@@ -49,8 +50,33 @@ export const InsightsPage = ({ stats, fatigueMetrics, isTracking }: InsightsPage
             
             const detectedPattern = detectExhaustionPattern(result.factors);
             setPattern(detectedPattern);
+
+            // Create combined metrics snapshot
+            const currentMetrics: CombinedMetrics = {
+                timestamp: Date.now(),
+                behavioral: behavioralMetrics,
+                physiological: physiologicalMetrics,
+                exhaustionScore: result.totalScore
+            };
+
+            // Add to history (keep last 120 minutes)
+            setMetricsHistory(prev => {
+                const updated = [...prev, currentMetrics];
+                return updated.slice(-120); // Keep last 2 hours
+            });
+
+            // Store metrics for AI training (every minute)
+            if (aiPredictions.isReady) {
+                aiPredictions.storeMetrics(currentMetrics);
+
+                // Generate prediction if we have enough data
+                if (metricsHistory.length >= 60) {
+                    aiPredictions.predict([...metricsHistory, currentMetrics]);
+                    aiPredictions.generateInsight([...metricsHistory, currentMetrics]);
+                }
+            }
         }
-    }, [isTracking, fatigueMetrics, stats.factors]);
+    }, [isTracking, fatigueMetrics, stats?.factors, aiPredictions.isReady]);
     
     if (!stats) return null;
     return (
@@ -69,6 +95,180 @@ export const InsightsPage = ({ stats, fatigueMetrics, isTracking }: InsightsPage
                     <button className="px-6 py-2 text-[11px] font-black rounded-full transition-all text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 uppercase tracking-widest cursor-pointer">Month</button>
                 </div>
             </div>
+
+            {/* AI Prediction Section */}
+            {isTracking && aiPredictions.isReady && aiPredictions.currentPrediction && (
+                <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 dark:from-violet-950/30 dark:to-fuchsia-950/30 rounded-3xl p-10 border border-violet-100 dark:border-violet-800 shadow-lg transition-colors">
+                    <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center shadow-lg">
+                                <Sparkles size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                                    AI Prediction Engine
+                                    {aiPredictions.currentPrediction.confidence > 0.7 && (
+                                        <span className="text-xs font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-full">
+                                            {Math.round(aiPredictions.currentPrediction.confidence * 100)}% confidence
+                                        </span>
+                                    )}
+                                </h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-400">30-minute predictive analysis using LSTM neural network</p>
+                            </div>
+                        </div>
+                        {aiPredictions.status && (
+                            <div className="text-right">
+                                <p className="text-xs text-slate-400 uppercase tracking-widest">Training Data</p>
+                                <p className="text-lg font-bold text-slate-900 dark:text-slate-50">{aiPredictions.status.metricsCount} samples</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+                        {/* Predicted Score */}
+                        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Target className="text-violet-500" size={20} />
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Predicted in 30min</p>
+                            </div>
+                            <div className="text-center">
+                                <div className={`text-5xl font-black mb-2 ${
+                                    aiPredictions.currentPrediction.predictedScore > 70 ? 'text-emerald-500' :
+                                    aiPredictions.currentPrediction.predictedScore > 50 ? 'text-amber-500' :
+                                    'text-rose-500'
+                                }`}>
+                                    {aiPredictions.currentPrediction.predictedScore}
+                                </div>
+                                <div className="flex items-center justify-center gap-2">
+                                    {aiPredictions.currentPrediction.trend === 'improving' && (
+                                        <TrendingUpIcon className="text-emerald-500" size={16} />
+                                    )}
+                                    {aiPredictions.currentPrediction.trend === 'declining' && (
+                                        <TrendingUpIcon className="text-rose-500 rotate-180" size={16} />
+                                    )}
+                                    <span className={`text-xs font-bold uppercase tracking-widest ${
+                                        aiPredictions.currentPrediction.trend === 'improving' ? 'text-emerald-600 dark:text-emerald-400' :
+                                        aiPredictions.currentPrediction.trend === 'declining' ? 'text-rose-600 dark:text-rose-400' :
+                                        aiPredictions.currentPrediction.trend === 'critical' ? 'text-rose-600 dark:text-rose-400' :
+                                        'text-slate-600 dark:text-slate-400'
+                                    }`}>
+                                        {aiPredictions.currentPrediction.trend}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Time to Exhaustion */}
+                        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Clock className="text-fuchsia-500" size={20} />
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Time to Threshold</p>
+                            </div>
+                            <div className="text-center">
+                                <div className={`text-5xl font-black mb-2 ${
+                                    aiPredictions.currentPrediction.timeToExhaustion === Infinity ? 'text-emerald-500' :
+                                    aiPredictions.currentPrediction.timeToExhaustion > 60 ? 'text-amber-500' :
+                                    'text-rose-500'
+                                }`}>
+                                    {aiPredictions.currentPrediction.timeToExhaustion === Infinity 
+                                        ? '∞' 
+                                        : `${Math.round(aiPredictions.currentPrediction.timeToExhaustion)}m`}
+                                </div>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Until score {'<'} 40</p>
+                            </div>
+                        </div>
+
+                        {/* Risk Level */}
+                        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Shield className="text-blue-500" size={20} />
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Risk Level</p>
+                            </div>
+                            <div className="text-center">
+                                <div className={`text-4xl font-black mb-2 uppercase ${
+                                    aiPredictions.currentPrediction.riskLevel === 'critical' ? 'text-rose-500' :
+                                    aiPredictions.currentPrediction.riskLevel === 'high' ? 'text-orange-500' :
+                                    aiPredictions.currentPrediction.riskLevel === 'medium' ? 'text-amber-500' :
+                                    'text-emerald-500'
+                                }`}>
+                                    {aiPredictions.currentPrediction.riskLevel}
+                                </div>
+                                <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${
+                                    aiPredictions.currentPrediction.riskLevel === 'critical' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' :
+                                    aiPredictions.currentPrediction.riskLevel === 'high' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' :
+                                    aiPredictions.currentPrediction.riskLevel === 'medium' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' :
+                                    'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                                }`}>
+                                    AI Forecast
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* AI Actions */}
+                        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Zap className="text-amber-500" size={20} />
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Model Status</p>
+                            </div>
+                            {aiPredictions.isTraining ? (
+                                <div className="text-center">
+                                    <div className="text-blue-600 dark:text-blue-400 mb-2">
+                                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                                        <p className="text-sm font-bold">Training...</p>
+                                    </div>
+                                    {aiPredictions.trainingProgress && (
+                                        <p className="text-xs text-slate-500">Epoch {aiPredictions.trainingProgress.epoch + 1}/20</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => aiPredictions.trainModel(true)}
+                                    className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white px-4 py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all cursor-pointer"
+                                >
+                                    Train Model
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* AI Recommendation */}
+                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <div className="flex items-start gap-4">
+                            <Lightbulb className="text-amber-500 flex-shrink-0 mt-1" size={24} fill="currentColor" />
+                            <div className="flex-1">
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">AI Recommendation</p>
+                                <p className="text-lg font-bold text-slate-900 dark:text-slate-50 mb-4">
+                                    {aiPredictions.currentPrediction.recommendation}
+                                </p>
+                                {aiPredictions.currentInsight && aiPredictions.currentInsight.actions.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Suggested Actions:</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            {aiPredictions.currentInsight.actions.map((action, i) => (
+                                                <div key={i} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400">
+                                                    <CheckCircle2 className="text-violet-500 flex-shrink-0 mt-0.5" size={16} />
+                                                    <span>{action}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* AI Not Ready Message */}
+            {isTracking && !aiPredictions.isReady && (
+                <div className="bg-slate-100 dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 text-center transition-colors">
+                    <Sparkles className="mx-auto mb-4 text-slate-400" size={48} />
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-2">AI Engine Initializing...</h3>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm max-w-md mx-auto">
+                        Setting up TensorFlow.js and loading prediction models. This will only take a moment.
+                    </p>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 relative overflow-hidden rounded-3xl bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-10 flex flex-col justify-between group transition-colors">
