@@ -3,10 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { storageService } from './storage.js';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchExtensionBehavioralData, subscribeToExtensionUpdates } from './lib/extensionBridge';
+import { useBehaviorAlerts } from './hooks/useBehaviorAlerts';
+import { BehaviorAlertPopup } from './components/BehaviorAlertPopup';
+import { WellnessModal } from './components/WellnessModal';
+import type { WellnessType } from './hooks/useBehaviorAlerts';
+import type { BehaviorAlert } from './hooks/useBehaviorAlerts';
 
 // Import types
 import { Settings, Activity, EventLog, Stats } from './types';
@@ -36,7 +41,11 @@ export default function App() {
   const [events, setEvents] = useState<EventLog[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
+  // Wellness modal state
+  const [wellnessOpen, setWellnessOpen] = useState(false);
+  const [wellnessInitialTab, setWellnessInitialTab] = useState<WellnessType>('breathing');
+
   // Initialize fatigue detection
   const fatigueDetection = useFatigueDetection();
 
@@ -107,8 +116,141 @@ export default function App() {
           setSettings(defaultSettings);
         }
         
-        setActivities(activitiesData);
-        setEvents(eventsData);
+        // Initialize sample activities if none exist
+        let finalActivities = activitiesData;
+        if (!activitiesData || activitiesData.length === 0) {
+          const now = new Date();
+          const sampleActivities: Activity[] = [
+            {
+              id: 1,
+              type: 'FOCUS_BLOCK',
+              title: 'Deep Work Session',
+              description: 'Extended focus period with minimal distractions. Excellent concentration and task completion.',
+              start_time: new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString(),
+              end_time: new Date(now.getTime() - 2.5 * 60 * 60 * 1000).toISOString(),
+              score_impact: 15
+            },
+            {
+              id: 2,
+              type: 'HIGH_DISTRACTION',
+              title: 'Distraction Spike Detected',
+              description: 'Multiple tab switches and notifications detected. Focus score declined during this period.',
+              start_time: new Date(now.getTime() - 2.5 * 60 * 60 * 1000).toISOString(),
+              end_time: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+              score_impact: -8
+            },
+            {
+              id: 3,
+              type: 'BREAK',
+              title: 'Recovery Break Taken',
+              description: 'Took a 15-minute break as recommended. System detected reduced eye strain and improved posture upon return.',
+              start_time: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+              end_time: new Date(now.getTime() - 1.75 * 60 * 60 * 1000).toISOString(),
+              score_impact: 5
+            },
+            {
+              id: 4,
+              type: 'FOCUS_BLOCK',
+              title: 'Code Review Session',
+              description: 'Maintained steady focus while reviewing pull requests. Good task-switching discipline.',
+              start_time: new Date(now.getTime() - 1.5 * 60 * 60 * 1000).toISOString(),
+              end_time: new Date(now.getTime() - 45 * 60 * 1000).toISOString(),
+              score_impact: 10
+            },
+            {
+              id: 5,
+              type: 'HIGH_DISTRACTION',
+              title: 'Meeting Interruptions',
+              description: 'Multiple context switches between meetings and work. Physiological stress indicators elevated.',
+              start_time: new Date(now.getTime() - 45 * 60 * 1000).toISOString(),
+              end_time: new Date(now.getTime() - 15 * 60 * 1000).toISOString(),
+              score_impact: -5
+            }
+          ];
+          
+          // Store sample activities
+          for (const activity of sampleActivities) {
+            await storageService.addActivity(activity);
+          }
+          finalActivities = sampleActivities;
+        }
+        
+        // Initialize sample events if none exist
+        let finalEvents = eventsData;
+        if (!eventsData || eventsData.length === 0) {
+          const now = new Date();
+          const sampleEvents: EventLog[] = [
+            {
+              id: 1,
+              timestamp: new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString(),
+              event_type: 'FOCUS_SESSION_START',
+              message: 'Deep work session initiated. Blocking distractions enabled.'
+            },
+            {
+              id: 2,
+              timestamp: new Date(now.getTime() - 3.5 * 60 * 60 * 1000).toISOString(),
+              event_type: 'GOAL_ACHIEVED',
+              message: 'Daily focus target of 4 hours achieved! Keep up the great work.'
+            },
+            {
+              id: 3,
+              timestamp: new Date(now.getTime() - 2.5 * 60 * 60 * 1000).toISOString(),
+              event_type: 'DISTRACTION_SPIKE',
+              message: 'Tab switching frequency exceeded threshold. Consider refocusing.'
+            },
+            {
+              id: 4,
+              timestamp: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+              event_type: 'BREAK_RECOMMENDED',
+              message: 'Extended screen time detected. Taking a break is recommended.'
+            },
+            {
+              id: 5,
+              timestamp: new Date(now.getTime() - 1.75 * 60 * 60 * 1000).toISOString(),
+              event_type: 'BREAK_COMPLETED',
+              message: 'Break completed. Physiological metrics improved by 15%.'
+            },
+            {
+              id: 6,
+              timestamp: new Date(now.getTime() - 1.5 * 60 * 60 * 1000).toISOString(),
+              event_type: 'FOCUS_SESSION_START',
+              message: 'New focus session started. Smart breaks enabled.'
+            },
+            {
+              id: 7,
+              timestamp: new Date(now.getTime() - 1 * 60 * 60 * 1000).toISOString(),
+              event_type: 'POSTURE_ALERT',
+              message: 'Poor posture detected. Adjust screen height and sit upright.'
+            },
+            {
+              id: 8,
+              timestamp: new Date(now.getTime() - 45 * 60 * 1000).toISOString(),
+              event_type: 'CONTEXT_SWITCH_ATTEMPT',
+              message: 'Multiple application switches detected. Focus score decreased.'
+            },
+            {
+              id: 9,
+              timestamp: new Date(now.getTime() - 30 * 60 * 1000).toISOString(),
+              event_type: 'EYE_STRAIN_WARNING',
+              message: 'Blink rate below normal. Consider the 20-20-20 rule.'
+            },
+            {
+              id: 10,
+              timestamp: new Date(now.getTime() - 15 * 60 * 1000).toISOString(),
+              event_type: 'STRESS_SPIKE',
+              message: 'Elevated stress indicators. Breathing exercise recommended.'
+            }
+          ];
+          
+          // Store sample events
+          for (const event of sampleEvents) {
+            await storageService.addEvent(event.event_type, event.message);
+          }
+          finalEvents = sampleEvents;
+        }
+        
+        setActivities(finalActivities);
+        setEvents(finalEvents);
         
         // Merge stored stats with real-time behavioral data from extension
         const behavioralData = await fetchExtensionBehavioralData();
@@ -128,14 +270,27 @@ export default function App() {
       }
     };
     fetchData();
-    
-    // Subscribe to real-time extension updates
+
+    // Subscribe to real-time extension updates (push + polling built-in)
     const unsubscribe = subscribeToExtensionUpdates((behavioralData) => {
       setStats(prevStats => ({
         ...(prevStats || {}),
         ...behavioralData
       } as Stats));
     });
+
+    // Additional explicit polling every 10 seconds as a safety net
+    const pollInterval = setInterval(async () => {
+      try {
+        const behavioralData = await fetchExtensionBehavioralData();
+        if (behavioralData) {
+          setStats(prevStats => ({
+            ...(prevStats || {}),
+            ...behavioralData
+          } as Stats));
+        }
+      } catch {/* silent */}
+    }, 10000);
     
     // Listen for storage changes
     storageService.addChangeListener((changes) => {
@@ -158,8 +313,18 @@ export default function App() {
     
     return () => {
       unsubscribe();
+      clearInterval(pollInterval);
     };
   }, []);
+
+  // ── Behavior alerts ────────────────────────────────────────────────────
+  const { activeAlerts, dismissAlert } = useBehaviorAlerts(stats);
+
+  const handleAlertAction = useCallback((alert: BehaviorAlert) => {
+    setWellnessInitialTab(alert.wellnessType);
+    setWellnessOpen(true);
+    dismissAlert(alert.id);
+  }, [dismissAlert]);
 
   const handleSaveSettings = async (newSettings: Settings) => {
     try {
@@ -189,7 +354,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex flex-col font-sans transition-colors">
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} stats={stats} isExtensionPopup={isExtensionPopup} openFullDashboard={openFullDashboard} />
+      {/* Behavior alert toasts */}
+      <BehaviorAlertPopup
+        alerts={activeAlerts}
+        onDismiss={dismissAlert}
+        onAction={handleAlertAction}
+      />
+
+      {/* Wellness modal */}
+      <WellnessModal
+        isOpen={wellnessOpen}
+        onClose={() => setWellnessOpen(false)}
+        initialTab={wellnessInitialTab}
+      />
+      <Header activeTab={activeTab} setActiveTab={setActiveTab} stats={stats} isExtensionPopup={isExtensionPopup} openFullDashboard={openFullDashboard} onWellnessOpen={() => setWellnessOpen(true)} />
 
       <main className="flex-1 w-full p-3 sm:p-6 md:p-10" style={{maxWidth: isExtensionPopup ? '100%' : '100%', paddingBottom: isExtensionPopup ? '80px' : undefined}}>
         <AnimatePresence mode="wait">

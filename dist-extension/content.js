@@ -305,7 +305,265 @@
             if (message.type === 'show_intervention') {
                 showIntervention(message.score, message.isUrgent);
             }
+            if (message.type === 'show_behavior_alert') {
+                showBehaviorAlert(message.alert);
+            }
         });
+    }
+
+    // Listen for wellness CTA events dispatched by the executeScript-injected overlay
+    window.addEventListener('burnout-guard-wellness', (e) => {
+        const alertData = e.detail;
+        const isUrgent = alertData?.severity === 'danger';
+        showIntervention(null, isUrgent);
+        setTimeout(() => {
+            if (alertData?.wellnessType === 'stretch') {
+                document.getElementById('burnout-stretch-btn')?.click();
+            } else {
+                document.getElementById('burnout-breathe-btn')?.click();
+            }
+        }, 150);
+    });
+
+    // ─── Behavior Alert Overlay (centered, modern) ───────────────────────────
+    const SEVERITY_COLORS = {
+        info:    { bar: '#3b82f6', badge: '#eff6ff', badgeText: '#1d4ed8', badgeLabel: 'Heads Up',      icon: 'ℹ️' },
+        warning: { bar: '#f59e0b', badge: '#fffbeb', badgeText: '#b45309', badgeLabel: 'Warning',       icon: '⚠️' },
+        danger:  { bar: '#ef4444', badge: '#fef2f2', badgeText: '#b91c1c', badgeLabel: 'Action Needed', icon: '🔴' },
+    };
+
+    const WELLNESS_EMOJIS = { breathing: '🌬️', stretch: '🧘', eyeRest: '👁️', break: '☕' };
+
+    function showBehaviorAlert(alert) {
+        // Remove any existing behavior alert
+        const existing = document.getElementById('bg-behavior-alert-overlay');
+        if (existing) existing.remove();
+
+        const cfg = SEVERITY_COLORS[alert.severity] || SEVERITY_COLORS.info;
+        const wellnessEmoji = WELLNESS_EMOJIS[alert.wellnessType] || '🌬️';
+
+        const overlay = document.createElement('div');
+        overlay.id = 'bg-behavior-alert-overlay';
+
+        overlay.innerHTML = `
+      <style>
+        #bg-behavior-alert-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 2147483647;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          animation: bg-fade-in 0.25s ease;
+        }
+        @keyframes bg-fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes bg-card-in {
+          from { opacity: 0; transform: scale(0.9) translateY(16px); }
+          to   { opacity: 1; transform: scale(1)   translateY(0); }
+        }
+        @keyframes bg-card-out {
+          from { opacity: 1; transform: scale(1)   translateY(0); }
+          to   { opacity: 0; transform: scale(0.9) translateY(16px); }
+        }
+        #bg-alert-backdrop {
+          position: absolute;
+          inset: 0;
+          background: rgba(0,0,0,0.45);
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          cursor: pointer;
+        }
+        #bg-alert-card {
+          position: relative;
+          background: #ffffff;
+          border-radius: 24px;
+          box-shadow: 0 32px 80px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05);
+          width: 100%;
+          max-width: 440px;
+          overflow: hidden;
+          animation: bg-card-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #bg-alert-bar {
+          height: 5px;
+          width: 100%;
+          background: ${cfg.bar};
+        }
+        #bg-alert-body {
+          padding: 28px 28px 24px;
+        }
+        #bg-alert-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 20px;
+        }
+        #bg-alert-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 12px;
+          border-radius: 100px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+          background: ${cfg.badge};
+          color: ${cfg.badgeText};
+        }
+        #bg-alert-close {
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+          border: none;
+          background: #f1f5f9;
+          color: #64748b;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          transition: background 0.15s;
+        }
+        #bg-alert-close:hover { background: #e2e8f0; }
+        #bg-alert-main {
+          display: flex;
+          align-items: flex-start;
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+        #bg-alert-icon-wrap {
+          flex-shrink: 0;
+          width: 48px;
+          height: 48px;
+          border-radius: 16px;
+          background: ${cfg.badge};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 22px;
+        }
+        #bg-alert-title {
+          font-size: 18px;
+          font-weight: 800;
+          color: #0f172a;
+          margin: 0 0 6px;
+          line-height: 1.3;
+        }
+        #bg-alert-message {
+          font-size: 13px;
+          color: #475569;
+          margin: 0;
+          line-height: 1.55;
+        }
+        #bg-alert-suggestion {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          padding: 12px 14px;
+          margin: 0 0 20px 64px;
+          font-size: 12px;
+          color: #475569;
+          line-height: 1.5;
+        }
+        #bg-alert-suggestion strong { color: #334155; }
+        #bg-alert-actions {
+          display: flex;
+          gap: 10px;
+          margin-left: 64px;
+        }
+        .bg-alert-btn {
+          flex: 1;
+          padding: 12px 20px;
+          border-radius: 14px;
+          border: none;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          transition: all 0.15s;
+        }
+        #bg-alert-cta {
+          background: ${cfg.bar};
+          color: white;
+          box-shadow: 0 4px 12px ${cfg.bar}44;
+        }
+        #bg-alert-cta:hover { filter: brightness(1.08); transform: translateY(-1px); }
+        #bg-alert-skip {
+          background: #f1f5f9;
+          color: #64748b;
+        }
+        #bg-alert-skip:hover { background: #e2e8f0; color: #334155; }
+      </style>
+
+      <div id="bg-alert-backdrop"></div>
+      <div id="bg-alert-card">
+        <div id="bg-alert-bar"></div>
+        <div id="bg-alert-body">
+          <div id="bg-alert-header">
+            <div id="bg-alert-badge">${cfg.icon} ${cfg.badgeLabel}</div>
+            <button id="bg-alert-close">✕</button>
+          </div>
+          <div id="bg-alert-main">
+            <div id="bg-alert-icon-wrap">${cfg.icon}</div>
+            <div>
+              <p id="bg-alert-title">${alert.title}</p>
+              <p id="bg-alert-message">${alert.message}</p>
+            </div>
+          </div>
+          <div id="bg-alert-suggestion"><strong>💡 Suggestion: </strong>${alert.suggestion}</div>
+          <div id="bg-alert-actions">
+            <button class="bg-alert-btn" id="bg-alert-cta">${wellnessEmoji} ${alert.ctaLabel}</button>
+            <button class="bg-alert-btn" id="bg-alert-skip">Later</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+        document.body.appendChild(overlay);
+
+        function dismissBehaviorAlert() {
+            const card = document.getElementById('bg-alert-card');
+            if (card) {
+                card.style.animation = 'bg-card-out 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+            }
+            overlay.style.animation = 'none';
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.25s';
+            setTimeout(() => overlay.remove(), 280);
+        }
+
+        document.getElementById('bg-alert-backdrop').addEventListener('click', dismissBehaviorAlert);
+        document.getElementById('bg-alert-close').addEventListener('click', dismissBehaviorAlert);
+        document.getElementById('bg-alert-skip').addEventListener('click', dismissBehaviorAlert);
+
+        document.getElementById('bg-alert-cta').addEventListener('click', () => {
+            dismissBehaviorAlert();
+            // After the alert dismisses, launch the appropriate wellness exercise
+            setTimeout(() => {
+                const isUrgent = alert.severity === 'danger';
+                showIntervention(null, isUrgent);
+                // Auto-click the right action button after card renders
+                setTimeout(() => {
+                    if (alert.wellnessType === 'stretch') {
+                        document.getElementById('burnout-stretch-btn')?.click();
+                    } else {
+                        // Default to breathing for breathing/break/eyeRest
+                        document.getElementById('burnout-breathe-btn')?.click();
+                    }
+                }, 150);
+            }, 300);
+        });
+
+        // Auto-dismiss after 45 seconds
+        setTimeout(() => {
+            const el = document.getElementById('bg-behavior-alert-overlay');
+            if (el) dismissBehaviorAlert();
+        }, 45000);
     }
 
     function showIntervention(score, isUrgent) {
@@ -323,34 +581,43 @@
 
         overlay.innerHTML = `
       <style>
+        #burnout-guard-overlay-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.4);
+          backdrop-filter: blur(3px);
+          -webkit-backdrop-filter: blur(3px);
+          z-index: 2147483646;
+        }
         #burnout-guard-container {
           position: fixed;
-          bottom: 24px;
-          right: 24px;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
           z-index: 2147483647;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          animation: burnout-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+          animation: burnout-slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         @keyframes burnout-slide-in {
           from {
             opacity: 0;
-            transform: translateY(20px) scale(0.95);
+            transform: translate(-50%, calc(-50% + 20px)) scale(0.95);
           }
           to {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform: translate(-50%, -50%) scale(1);
           }
         }
 
         @keyframes burnout-slide-out {
           from {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform: translate(-50%, -50%) scale(1);
           }
           to {
             opacity: 0;
-            transform: translateY(20px) scale(0.95);
+            transform: translate(-50%, calc(-50% + 20px)) scale(0.95);
           }
         }
 
@@ -568,6 +835,7 @@
         }
       </style>
 
+      <div id="burnout-guard-overlay-backdrop"></div>
       <div id="burnout-guard-container">
         <div id="burnout-guard-card">
           <div class="burnout-header">
@@ -605,6 +873,10 @@
         document.body.appendChild(overlay);
 
         // ── Event Handlers ──
+        document.getElementById('burnout-guard-overlay-backdrop').addEventListener('click', () => {
+            dismissIntervention(overlay, score, 'backdrop_dismissed');
+        });
+
         document.getElementById('burnout-close-btn').addEventListener('click', () => {
             dismissIntervention(overlay, score, 'dismissed');
         });

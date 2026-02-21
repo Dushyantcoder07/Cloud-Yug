@@ -565,8 +565,11 @@ async function computeAndStoreScore() {
     // Update badge
     updateBadge(result.score);
 
-    // Check intervention thresholds
+    // Check old intervention thresholds (full-screen overlay for critical drops)
     checkInterventionThreshold(result.score);
+
+    // Check and fire granular behavior alerts to the active tab
+    await checkAndFireBehaviorAlerts(result.score, result.factors);
 
     // Broadcast real-time update to all listeners (popup, React app, etc.)
     broadcastScoreUpdate(result);
@@ -575,14 +578,258 @@ async function computeAndStoreScore() {
     await saveSessionData();
 }
 
+// ─── Granular Behavior Alerts ────────────────────────────────────────────────
+// Per-alert cooldowns (ms) — mirrors useBehaviorAlerts.ts
+const BEHAVIOR_ALERT_COOLDOWNS = {
+    score_danger:        5 * 60 * 1000,
+    score_warning:      10 * 60 * 1000,
+    tab_switching:       5 * 60 * 1000,
+    erratic_mouse:       8 * 60 * 1000,
+    anxious_scroll:      8 * 60 * 1000,
+    typing_fatigue:     10 * 60 * 1000,
+    click_accuracy:     10 * 60 * 1000,
+    late_night:         30 * 60 * 1000,
+};
+const behaviorAlertLastFired = {};
+
+async function checkAndFireBehaviorAlerts(score, factors) {
+    const now = Date.now();
+    const candidates = [];
+
+    if (score < 35) {
+        candidates.push({
+            key: 'score_danger', severity: 'danger',
+            title: 'Focus Score Critical',
+            message: `Your focus score has dropped to ${score}. Your cognitive state needs attention right now.`,
+            suggestion: 'A 4-minute breathing exercise can help restore clarity.',
+            ctaLabel: 'Start Breathing', wellnessType: 'breathing'
+        });
+    } else if (score < 55) {
+        candidates.push({
+            key: 'score_warning', severity: 'warning',
+            title: 'Focus Dropping',
+            message: `Focus score is ${score} — below healthy range. Signs of cognitive load are building up.`,
+            suggestion: 'Take a 2-minute break or stretch to reset.',
+            ctaLabel: 'Take a Break', wellnessType: 'stretch'
+        });
+    }
+
+    const tabPenalty = factors?.tabSwitching?.penalty ?? 0;
+    const tabSwitches = factors?.tabSwitching?.switches ?? 0;
+    if (tabPenalty >= 15 || tabSwitches >= 8) {
+        candidates.push({
+            key: 'tab_switching', severity: 'warning',
+            title: 'Too Much Tab Switching',
+            message: `You've switched tabs ${tabSwitches} times in the last 2 minutes. This fragments your attention.`,
+            suggestion: 'Close unused tabs and focus on one task at a time.',
+            ctaLabel: 'Breathing Reset', wellnessType: 'breathing'
+        });
+    }
+
+    if ((factors?.erraticMouse?.penalty ?? 0) >= 7) {
+        candidates.push({
+            key: 'erratic_mouse', severity: 'info',
+            title: 'Erratic Mouse Detected',
+            message: 'Rapid, unfocused mouse movement suggests cognitive overload or anxiety.',
+            suggestion: 'Rest your hands, close your eyes for 20 seconds.',
+            ctaLabel: 'Eye Rest', wellnessType: 'eyeRest'
+        });
+    }
+
+    if ((factors?.anxiousScroll?.penalty ?? 0) >= 4) {
+        candidates.push({
+            key: 'anxious_scroll', severity: 'info',
+            title: 'Doom Scrolling Detected',
+            message: "You're scrolling rapidly without pausing — a classic anxiety-browsing pattern.",
+            suggestion: 'Step away from the feed. Try a short breathing exercise.',
+            ctaLabel: 'Calm Down', wellnessType: 'breathing'
+        });
+    }
+
+    if ((factors?.typingFatigue?.penalty ?? 0) >= 12) {
+        candidates.push({
+            key: 'typing_fatigue', severity: 'warning',
+            title: 'Typing Fatigue',
+            message: 'High error rate and irregular keystroke rhythm detected. Your focus is getting tired.',
+            suggestion: 'Take a wrist and finger stretch break.',
+            ctaLabel: 'Stretch Now', wellnessType: 'stretch'
+        });
+    }
+
+    if ((factors?.lateNight?.penalty ?? 0) >= 8) {
+        const hour = new Date().getHours();
+        candidates.push({
+            key: 'late_night', severity: 'warning',
+            title: 'Late-Night Usage',
+            message: `It's ${hour}:00. Working this late disrupts tomorrow's cognitive performance.`,
+            suggestion: 'Consider a digital sunset. Wrap up and rest.',
+            ctaLabel: 'Wind Down', wellnessType: 'breathing'
+        });
+    }
+
+    // Fire only the first eligible alert (respect cooldowns)
+    for (const candidate of candidates) {
+        const lastFired = behaviorAlertLastFired[candidate.key] ?? 0;
+        const cooldown = BEHAVIOR_ALERT_COOLDOWNS[candidate.key] ?? 5 * 60 * 1000;
+        if (now - lastFired >= cooldown) {
+            behaviorAlertLastFired[candidate.key] = now;
+            await sendBehaviorAlertToTab(candidate);
+            break; // one at a time
+        }
+    }
+}
+
+// Injected directly into the page via chrome.scripting.executeScript —
+// completely independent of content script state.
+function _injectBehaviorAlertUI(alertData) {
+    // Guard: one alert at a time
+    if (document.getElementById('bg-behavior-alert-overlay')) return;
+
+    const COLORS = {
+        info:    { bar: '#3b82f6', badge: '#eff6ff', badgeText: '#1d4ed8', label: 'Heads Up',      icon: 'ℹ️' },
+        warning: { bar: '#f59e0b', badge: '#fffbeb', badgeText: '#b45309', label: 'Warning',       icon: '⚠️' },
+        danger:  { bar: '#ef4444', badge: '#fef2f2', badgeText: '#b91c1c', label: 'Action Needed', icon: '🔴' },
+    };
+    const WELLNESS = { breathing: '🌬️', stretch: '🧘', eyeRest: '👁️', break: '☕' };
+    const cfg = COLORS[alertData.severity] || COLORS.info;
+    const wellnessEmoji = WELLNESS[alertData.wellnessType] || '🌬️';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bg-behavior-alert-overlay';
+    overlay.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:16px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;animation:_bg_fadein 0.22s ease;';
+
+    overlay.innerHTML = `
+<style>
+@keyframes _bg_fadein{from{opacity:0}to{opacity:1}}
+@keyframes _bg_cardin{from{opacity:0;transform:translate(-50%,-50%) scale(0.88) translateY(20px)}to{opacity:1;transform:translate(-50%,-50%) scale(1) translateY(0)}}
+@keyframes _bg_cardout{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-50%) scale(0.88) translateY(20px)}}
+#_bg_backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.48);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);cursor:pointer;}
+#_bg_card{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:24px;box-shadow:0 32px 80px rgba(0,0,0,0.22),0 0 0 1px rgba(0,0,0,0.06);width:calc(100vw - 32px);max-width:440px;overflow:hidden;animation:_bg_cardin 0.32s cubic-bezier(0.16,1,0.3,1);}
+#_bg_bar{height:5px;background:${cfg.bar};}
+#_bg_body{padding:28px 28px 24px;}
+#_bg_head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+#_bg_badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;background:${cfg.badge};color:${cfg.badgeText};}
+#_bg_close{width:32px;height:32px;border-radius:10px;border:none;background:#f1f5f9;color:#64748b;cursor:pointer;font-size:16px;line-height:1;transition:background 0.15s;}
+#_bg_close:hover{background:#e2e8f0;}
+#_bg_main{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;}
+#_bg_icon{flex-shrink:0;width:48px;height:48px;border-radius:16px;background:${cfg.badge};display:flex;align-items:center;justify-content:center;font-size:22px;}
+#_bg_title{font-size:18px;font-weight:800;color:#0f172a;margin:0 0 6px;line-height:1.3;}
+#_bg_msg{font-size:13px;color:#475569;margin:0;line-height:1.55;}
+#_bg_tip{background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin:0 0 20px 64px;font-size:12px;color:#475569;line-height:1.5;}
+#_bg_tip b{color:#334155;}
+#_bg_actions{display:flex;gap:10px;margin-left:64px;}
+._bg_btn{flex:1;padding:12px 20px;border-radius:14px;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;font-family:inherit;}
+#_bg_cta{background:${cfg.bar};color:#fff;box-shadow:0 4px 12px ${cfg.bar}44;}
+#_bg_cta:hover{filter:brightness(1.08);transform:translateY(-1px);}
+#_bg_skip{background:#f1f5f9;color:#64748b;}
+#_bg_skip:hover{background:#e2e8f0;color:#334155;}
+</style>
+<div id="_bg_backdrop"></div>
+<div id="_bg_card">
+  <div id="_bg_bar"></div>
+  <div id="_bg_body">
+    <div id="_bg_head">
+      <div id="_bg_badge">${cfg.icon} ${cfg.label}</div>
+      <button id="_bg_close">✕</button>
+    </div>
+    <div id="_bg_main">
+      <div id="_bg_icon">${cfg.icon}</div>
+      <div>
+        <p id="_bg_title">${alertData.title}</p>
+        <p id="_bg_msg">${alertData.message}</p>
+      </div>
+    </div>
+    <div id="_bg_tip"><b>💡 Suggestion: </b>${alertData.suggestion}</div>
+    <div id="_bg_actions">
+      <button class="_bg_btn" id="_bg_cta">${wellnessEmoji} ${alertData.ctaLabel}</button>
+      <button class="_bg_btn" id="_bg_skip">Later</button>
+    </div>
+  </div>
+</div>`;
+
+    document.documentElement.appendChild(overlay);
+
+    function dismiss() {
+        const card = document.getElementById('_bg_card');
+        if (card) { card.style.animation = '_bg_cardout 0.25s cubic-bezier(0.16,1,0.3,1) forwards'; }
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.25s';
+        setTimeout(() => overlay.remove(), 280);
+    }
+
+    document.getElementById('_bg_backdrop').addEventListener('click', dismiss);
+    document.getElementById('_bg_close').addEventListener('click', dismiss);
+    document.getElementById('_bg_skip').addEventListener('click', dismiss);
+    document.getElementById('_bg_cta').addEventListener('click', () => {
+        dismiss();
+        // Dispatch custom event so the content script can optionally launch the exercise
+        setTimeout(() => window.dispatchEvent(new CustomEvent('burnout-guard-wellness', { detail: alertData })), 300);
+    });
+
+    // Auto-dismiss after 45 seconds
+    setTimeout(() => { if (document.getElementById('bg-behavior-alert-overlay')) dismiss(); }, 45000);
+}
+
+async function sendBehaviorAlertToTab(alert) {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id || !tab.url) return;
+        // Skip internal browser / extension pages
+        if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
+            tab.url.startsWith('about:') || tab.url.startsWith('edge://')) return;
+
+        // Use executeScript so we bypass stale content-script state entirely
+        await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: _injectBehaviorAlertUI,
+            args: [alert]
+        });
+    } catch (err) {
+        console.error('[BurnoutGuard] executeScript failed:', err.message);
+    }
+}
+
 // ─── Real-time Broadcasting ──────────────────────────────────────────────
 function broadcastScoreUpdate(result) {
-    // Send to all extension contexts (popup, options page, etc.)
+    const now = Date.now();
+    const sessionMs = now - sessionStartTime;
+    const sessionMinutes = Math.floor(sessionMs / 60000);
+    const sessionHours = Math.floor(sessionMinutes / 60);
+    const sessionMins = sessionMinutes % 60;
+
+    // Count tab switches today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayTabSwitches = eventWindow.filter(e =>
+        e.type === 'tab_switch' &&
+        e.timestamp >= todayStart.getTime() &&
+        !e.data?.fromUrl?.startsWith('chrome-extension://')
+    ).length;
+
+    // Rough idle vs active time
+    const idleChanges = eventWindow.filter(e => e.type === 'idle_change');
+    let totalIdleMs = 0;
+    for (let i = 0; i < idleChanges.length; i++) {
+        if (idleChanges[i].data.state === 'idle' || idleChanges[i].data.state === 'locked') {
+            const end = idleChanges[i + 1]?.timestamp || now;
+            totalIdleMs += end - idleChanges[i].timestamp;
+        }
+    }
+    const idleMinutes = Math.floor(totalIdleMs / 60000);
+    const activeMinutes = Math.max(0, sessionMinutes - idleMinutes);
+
+    // Send to all extension contexts (popup, options page, etc.) with full payload
     chrome.runtime.sendMessage({
         type: 'score_update',
         score: result.score,
         factors: result.factors,
-        timestamp: Date.now()
+        timestamp: now,
+        // Include enough data for direct consumption (no second roundtrip needed)
+        sessionDuration: sessionHours > 0 ? `${sessionHours}h ${sessionMins}m` : `${sessionMins}m`,
+        activeTime: `${activeMinutes}m`,
+        idleTime: `${idleMinutes}m`,
+        tabSwitches: todayTabSwitches,
+        idleState: currentIdleState
     }).catch(() => {
         // No listeners, that's fine
     });

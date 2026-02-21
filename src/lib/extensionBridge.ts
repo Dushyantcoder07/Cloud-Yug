@@ -68,21 +68,41 @@ export async function fetchExtensionBehavioralData(): Promise<Partial<Stats> | n
 }
 
 /**
- * Listen for real-time updates from extension
+ * Listen for real-time updates from extension.
+ * Uses the broadcast payload directly to avoid a second roundtrip.
+ * Falls back to polling every 10 seconds.
  */
 export function subscribeToExtensionUpdates(callback: (data: Partial<Stats>) => void): () => void {
     if (!isExtensionContext) {
         console.log('[ExtensionBridge] Not in extension context, using mock updates');
-        // Simulate updates every 30 seconds with mock data
+        // Simulate updates every 8 seconds with mock data for dev
         const interval = setInterval(() => {
             callback(getMockBehavioralData());
-        }, 30000);
+        }, 8000);
         
         return () => clearInterval(interval);
     }
 
     const messageListener = (message: any) => {
-        if (message.type === 'score_update' || message.type === 'behavioral_update') {
+        if (message.type === 'score_update') {
+            // Use the broadcast payload directly — no second roundtrip
+            const partialStats: Partial<Stats> = {
+                focus_score: message.score,
+                currentScore: message.score,
+                factors: message.factors,
+                session_duration: message.sessionDuration,
+                active_time: message.activeTime,
+                idle_time: message.idleTime,
+                tab_switches: message.tabSwitches,
+                idleState: message.idleState,
+            };
+            callback(partialStats);
+
+            // Also do a full refresh in background for complete data (hourly scores, insights, etc.)
+            fetchExtensionBehavioralData().then(data => {
+                if (data) callback(data);
+            });
+        } else if (message.type === 'behavioral_update') {
             fetchExtensionBehavioralData().then(data => {
                 if (data) callback(data);
             });
@@ -90,9 +110,17 @@ export function subscribeToExtensionUpdates(callback: (data: Partial<Stats>) => 
     };
 
     chrome.runtime.onMessage.addListener(messageListener);
+
+    // Polling fallback: re-fetch every 10 seconds regardless of push events
+    const pollInterval = setInterval(() => {
+        fetchExtensionBehavioralData().then(data => {
+            if (data) callback(data);
+        });
+    }, 10000);
     
     return () => {
         chrome.runtime.onMessage.removeListener(messageListener);
+        clearInterval(pollInterval);
     };
 }
 

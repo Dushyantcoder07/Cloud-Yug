@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bolt, Settings as SettingsIcon, Bell, Moon, Sun, ExternalLink } from 'lucide-react';
+import { Bolt, Settings as SettingsIcon, Bell, Moon, Sun, ExternalLink, Wind } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Stats } from '../types';
 
@@ -24,13 +24,15 @@ export const Header = ({
     setActiveTab,
     stats,
     isExtensionPopup,
-    openFullDashboard
+    openFullDashboard,
+    onWellnessOpen
 }: {
     activeTab: string;
     setActiveTab: (tab: string) => void;
     stats: Stats | null;
     isExtensionPopup?: boolean;
     openFullDashboard?: () => void;
+    onWellnessOpen?: () => void;
 }) => {
     const [darkMode, setDarkMode] = useState(() => {
         const saved = localStorage.getItem('darkMode');
@@ -113,6 +115,15 @@ export const Header = ({
                         <span className="flex h-2 w-2 rounded-full bg-blue-600"></span>
                         <span className="text-xs font-bold text-blue-600 dark:text-blue-400 tracking-wide uppercase">SCORE: {stats?.focus_score}</span>
                     </div>
+                    {onWellnessOpen && (
+                        <button
+                            onClick={onWellnessOpen}
+                            className="p-1.5 sm:p-2 transition-all rounded-lg cursor-pointer text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:scale-110"
+                            title="Open Wellness Station"
+                        >
+                            <Wind size={18} />
+                        </button>
+                    )}
                     <button
                         onClick={toggleDarkMode}
                         className="p-1.5 sm:p-2 transition-all rounded-lg cursor-pointer text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:scale-110"
